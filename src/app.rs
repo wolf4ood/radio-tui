@@ -1,6 +1,7 @@
-use color_eyre::Result;
+use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::Frame;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 use crate::{
     action::Action,
@@ -9,11 +10,19 @@ use crate::{
 
 pub struct App {
     should_quit: bool,
+
+    rx: UnboundedReceiver<Action>,
+    tx: UnboundedSender<Action>,
 }
 
 impl App {
     pub fn new() -> Self {
-        Self { should_quit: false }
+        let (tx, rx) = unbounded_channel();
+        Self {
+            should_quit: false,
+            tx,
+            rx,
+        }
     }
 
     pub async fn run(&mut self) -> Result<()> {
@@ -24,15 +33,17 @@ impl App {
         tui.enter()?; // Starts event handler, enters raw mode, enters alternate screen
 
         loop {
-            tui.draw(|f| {
-                self.ui(f);
-            })?;
-
             if let Some(evt) = tui.next().await {
-                // `tui.next().await` blocks till next event
-                let mut maybe_action = self.handle_event(evt);
-                while let Some(action) = maybe_action {
-                    maybe_action = self.update(action);
+                self.handle_event(evt).map(|action| self.tx.send(action));
+                while let Ok(action) = self.rx.try_recv() {
+                    self.handle_action(action.clone())
+                        .map(|action| self.tx.send(action));
+
+                    if matches!(action, Action::Quit) {
+                        tui.draw(|f| {
+                            self.ui(f);
+                        })?;
+                    }
                 }
             };
 
@@ -46,27 +57,31 @@ impl App {
         Ok(())
     }
 
-
-    fn tick(&mut self)  {
-
-    }
+    fn tick(&mut self) {}
 
     fn ui(&self, _frame: &mut Frame) {}
 
     fn handle_event(&self, event: Event) -> Option<Action> {
         match event {
             Event::Tick => Some(Action::Tick),
-            Event::Key(KeyEvent {
-                code: KeyCode::Esc, ..
-            }) => Some(Action::Quit),
+            Event::Render => Some(Action::Render),
+            Event::Key(event) => self.handle_key_event(event),
             _ => None,
         }
     }
 
-    fn update(&mut self, action: Action) -> Option<Action> {
+    fn handle_key_event(&self, event: KeyEvent) -> Option<Action> {
+        match event.code {
+            KeyCode::Esc => Some(Action::Quit),
+            _ => None,
+        }
+    }
+
+    fn handle_action(&mut self, action: Action) -> Option<Action> {
         match action {
             Action::Tick => self.tick(),
             Action::Quit => self.should_quit = true,
+            Action::Render => {}
         };
         None
     }

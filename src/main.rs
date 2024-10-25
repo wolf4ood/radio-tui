@@ -1,5 +1,5 @@
 use app::App;
-use color_eyre::Result;
+use anyhow::Result;
 use logging::initialize_logging;
 
 mod action;

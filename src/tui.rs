@@ -3,7 +3,7 @@ use std::{
     time::Duration,
 };
 
-use color_eyre::eyre::Result;
+use anyhow::Result;
 
 use crossterm::event::EventStream;
 use futures::{FutureExt, StreamExt};
