@@ -39,7 +39,7 @@ impl App {
                     self.handle_action(action.clone())
                         .map(|action| self.tx.send(action));
 
-                    if matches!(action, Action::Quit) {
+                    if matches!(action, Action::Render) {
                         tui.draw(|f| {
                             self.ui(f);
                         })?;
